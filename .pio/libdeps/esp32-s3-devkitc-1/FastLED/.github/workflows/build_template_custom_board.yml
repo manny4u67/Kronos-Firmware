@@ -1,0 +1,51 @@
+name: Template for Custom Board Build
+
+on:
+  workflow_call:
+    inputs:
+      args:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install PlatformIO build dependencies
+        run: |
+          pip install -r ci/requirements.txt
+
+      # Use the fastest build to instantiate the ~/.platformio/boards folder
+      - name: Pre-build to ensure ~/.platformio/boards folder is created
+        run: python ./ci/ci-compile.py --boards uno --examples Blink
+
+      # Copy the custom board JSON file to the PlatformIO boards folder
+      - name: Copy ci/boards/*.json to ~/.platformio/boards
+        run: |
+          mkdir -p ~/.platformio/boards
+          cp ci/boards/*.json ~/.platformio/boards
+
+      - name: Build
+        id: build
+        run: python ./ci/ci-compile.py ${{ inputs.args }}
+
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ inputs.args }}-${{ github.run_number }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: .build/
+          include-hidden-files: true
+
+      - name: Check build status
+        if: failure()
+        run: exit 1
+
