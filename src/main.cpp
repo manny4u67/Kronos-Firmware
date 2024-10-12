@@ -51,83 +51,114 @@ int rpm;
 int lastEncoderValue = 0;
 int currentEncoderValue = 0;
 
+
 //Hall Effect Button Control
 #define HALL1 9 // HALL EFFECT SENSOR 1 GPIO
 #define HALL2 10 // HALL EFFECT SENSOR 2 GPIO
 #define HALL3 14 // HALL EFFECT SENSOR 3 GPIO
 int hallsens = 3;
 
+
 class HallX {
   private:
-    static const int numReadings =  2;
+    static const int averagingSamples =  2;
     int readIndex = 0;
-    int total = 0;
-    int average = 0;
-    int sens = 1; // sens 1 = 128 2= 256 3 = 512 4 = 1024 5 = 2048
-    int value;
-    int readings[numReadings];
-    int state;
+    int total = 0; //used in hallReadClean
+    int average = 0; //used in hallReadClean
+    int precision = 1; // precison 1 = 128 2= 256 3 = 512 4 = 1024 5 = 2048
+    int trigPoint = 0;
+    int value; 
+    int readings[averagingSamples]; // used in hallReadClean
     int minVal=4095;
     int maxVal=0;
+ 
+    // check if AS5600 library is included
+    #if __has_include (<AS5600.h>)
+      const bool USE_AS5600 = 1;
+    #else
+      const bool USE_AS5600 = 0;
+    #endif
+
   public:
     byte pin;
 
     HallX(byte pin) {
       this->pin = pin;
+
     }
 
+    
+    // Return raw sensor value from 0 to 4095
     int hallRead(){
       value = analogRead(pin);
       return value;
     }
+
+    // Set the min and max hall analog values
     int hallCal(){
-      // record sensor max value
+      // record hall analog max value
       value = analogRead(pin);
       if (value > maxVal) {
         maxVal = value;
       }
-      // record sensor min value
+      // record hall analog min value
       if (value < minVal) {
         minVal = value;
       }
       return value;
     }
 
+    // set hall precision variable (128, 256, 512, 1024, 2048)
     void setSens(int mutliplier){
-      sens = mutliplier;
+      precision = mutliplier;
     }
+
+    // return hall analog value that has been proper precision **PREFFERED FOR RAW OUTPUT
     int hallReadCal(){
       int mapMax;
-      mapMax = sens * 128;
-      // record sensor value
+      mapMax = precision * 128;
+      // record hall analog value
       value = analogRead(pin)-35;
-      // in case the sensor value is outside the range seen during calibration
+      // in case the hall analog value is outside the range seen during calibration
       value = constrain(value, minVal, maxVal);
-      // map the sensor value to a range from 0 to 1000
+      // map the hall analog value to a range from 0 to 1000
       value = map(value, minVal, maxVal, 0, mapMax);
       return value;
     }
 
+    // return hall analog value with calibration and noise reduction !!SLOW!!
     int hallReadClean(){
         total = total - readings[readIndex];
-    // read from the sensor:
+    // read from the hall analog:
     readings[readIndex] = hallReadCal();
     // add the reading to the total:
     total = total + readings[readIndex];
     // advance to the next position in the array:
     readIndex = readIndex + 1;
     // if we're at the end of the array...
-    if (readIndex >= numReadings) {
+    if (readIndex >= averagingSamples) {
       // ...wrap around to the beginning:
       readIndex = 0;
-  }
+      average = total / averagingSamples;
+    }
+    delay(1);
+    return average;
+    }
 
-  // calculate the average:
-  average = total / numReadings;
-
-  delay(1);
-  return average;
-  }
+    // set hall trigger point
+    int hallSetTrigRotary(){
+      int hallTrigMax = (precision * 128);
+      if (USE_AS5600){ 
+        int hallSetCurrent = as5600.rawAngle();
+        map(hallSetCurrent, 0, 4056, 0, hallTrigMax);
+        trigPoint = hallSetCurrent / 2;
+        return trigPoint;
+      }
+      else{
+        trigPoint = 0;
+        return trigPoint;
+      }
+    }
 };
 
   HallX h1(HALL1);
