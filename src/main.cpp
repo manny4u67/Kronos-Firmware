@@ -24,7 +24,7 @@ IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 #include <BleKeyboard.h>
 #include <AS5600.h>
 
-
+// Data Pins
 #define DATA_PIN 48 // ARGB DATA PIN 
 #define DATA_PIN2 38 // ARGB DATA PIN 2
 #define SDA0_Pin 18   // ESP32 SDA PIN
@@ -81,13 +81,11 @@ class HallX {
 
   public:
     byte pin;
-
     HallX(byte pin) {
       this->pin = pin;
 
     }
 
-    
     // Return raw sensor value from 0 to 4095
     int hallRead(){
       value = analogRead(pin);
@@ -117,30 +115,24 @@ class HallX {
     int hallReadCal(){
       int mapMax;
       mapMax = precision * 128;
-      // record hall analog value
-      value = analogRead(pin)-35;
-      // in case the hall analog value is outside the range seen during calibration
-      value = constrain(value, minVal, maxVal);
-      // map the hall analog value to a range from 0 to 1000
-      value = map(value, minVal, maxVal, 0, mapMax);
+      value = analogRead(pin)-35; // record hall analog value
+      value = constrain(value, minVal, maxVal); // in case the hall analog value is outside the range seen during calibration67
+      value = map(value, minVal, maxVal, 0, mapMax); // map the hall analog value to a range from 0 to 1000
       return value;
     }
 
     // return hall analog value with calibration and noise reduction !!SLOW!!
     int hallReadClean(){
-        total = total - readings[readIndex];
-    // read from the hall analog:
-    readings[readIndex] = hallReadCal();
-    // add the reading to the total:
-    total = total + readings[readIndex];
-    // advance to the next position in the array:
-    readIndex = readIndex + 1;
+      total = total - readings[readIndex];
+      readings[readIndex] = hallReadCal(); // read from the hall analog:
+      total = total + readings[readIndex]; // add the reading to the total:
+      readIndex = readIndex + 1; // advance to the next position in the array:
     // if we're at the end of the array...
-    if (readIndex >= averagingSamples) {
-      // ...wrap around to the beginning:
-      readIndex = 0;
-      average = total / averagingSamples;
-    }
+      if (readIndex >= averagingSamples) {
+        // ...wrap around to the beginning:
+        readIndex = 0;
+        average = total / averagingSamples;
+      }
     delay(1);
     return average;
     }
@@ -148,6 +140,7 @@ class HallX {
     // set hall trigger point
     int hallSetTrigRotary(){
       int hallTrigMax = (precision * 128);
+      // check if AS5600 library is included ((determined by ))
       if (USE_AS5600){ 
         int hallSetCurrent = as5600.rawAngle();
         map(hallSetCurrent, 0, 4056, 0, hallTrigMax);
@@ -161,9 +154,9 @@ class HallX {
     }
 };
 
-  HallX h1(HALL1);
-  HallX h2(HALL2);
-  HallX h3(HALL3);
+  HallX h1(HALL1); // Hall Effect Sensor 1 Object
+  HallX h2(HALL2); // Hall Effect Sensor 2 Object
+  HallX h3(HALL3); // Hall Effect Sensor 3 Object
 
 // ARGB ARRAY mapping
 const int MAPROWS = 10;
