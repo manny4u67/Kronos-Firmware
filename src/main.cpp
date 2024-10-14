@@ -23,6 +23,7 @@ IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 #include <Wire.h>
 #include <BleKeyboard.h>
 #include <AS5600.h>
+#include <String.h>
 
 // Data Pins
 #define DATA_PIN 48 // ARGB DATA PIN 
@@ -43,7 +44,7 @@ CRGB leds[NUM_LEDS];
 #define NUM_LEDS2 3 
 CRGB leds2[NUM_LEDS2];
 
-//Hall Effect Rotary Encoder
+// Hall Effect Rotary Encoder
 AS5600 as5600;   //  use default Wire
 static uint32_t newPosition = 0;
 static uint32_t oldPosition = 0;
@@ -52,19 +53,20 @@ int lastEncoderValue = 0;
 int currentEncoderValue = 0;
 
 
-//Hall Effect Button Control
+// Hall Effect Button Control
+#define HALL0 3 // HALL EFFECT SENSOR 0 GPIO
 #define HALL1 9 // HALL EFFECT SENSOR 1 GPIO
 #define HALL2 10 // HALL EFFECT SENSOR 2 GPIO
 #define HALL3 14 // HALL EFFECT SENSOR 3 GPIO
 int hallsens = 3;
-
+int currentHall = 1;
 
 class HallX {
   private:
     static const int averagingSamples =  2;
     int readIndex = 0;
-    int total = 0; //used in hallReadClean
-    int average = 0; //used in hallReadClean
+    int total = 0; // used in hallReadClean
+    int average = 0; // used in hallReadClean
     int precision = 1; // precison 1 = 128 2= 256 3 = 512 4 = 1024 5 = 2048
     int trigPoint = 0;
     int value; 
@@ -152,11 +154,40 @@ class HallX {
         return trigPoint;
       }
     }
+
+    bool checkHallTrig(int option){
+      switch (option) {
+        case 0:
+          if (hallReadCal() < trigPoint) {
+            return true;
+          }   
+          else {
+            return false; 
+          }
+        break;
+
+        case 1:
+          if(hallRead() < 1300) {
+            return true;
+          }
+          else {
+            return false; 
+          }
+        break;
+
+        default:
+          return false;
+        break;
+        }
+      }
 };
 
-  HallX h1(HALL1); // Hall Effect Sensor 1 Object
-  HallX h2(HALL2); // Hall Effect Sensor 2 Object
-  HallX h3(HALL3); // Hall Effect Sensor 3 Object
+//HallX h1(HALL1); // Hall Effect Sensor 1 Object
+//HallX h2(HALL2); // Hall Effect Sensor 2 Object
+//HallX h3(HALL3); // Hall Effect Sensor 3 Object
+//HallX h[] = {h1, h2, h3};
+
+HallX h[] = {HallX(HALL0), HallX(HALL1), HallX(HALL2), HallX(HALL3)};
 
 // ARGB ARRAY mapping
 const int MAPROWS = 10;
@@ -180,6 +211,9 @@ int ledmap[MAPROWS][MAPCOLS]={
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+int displayLayer =0;
+String displayText = "Press Key 1"; // 
+String displayText2 = "Keep Pressing";
 
 // Logo Bitmap for OLED Display
 const unsigned char myBitmap [] PROGMEM = 
@@ -261,6 +295,12 @@ const long interval = 500UL;
 unsigned long previousMillis2 = 0UL;
 const long interval2 = 100UL;
 
+// Delay Control 3
+unsigned long previousMillis3 = 0UL;
+unsigned long currentMillis3 = 0UL; 
+const long interval3 = 100UL;
+bool blink3 = 0;
+
 // Timer
 bool blink= 0;
 unsigned long startTime;
@@ -276,7 +316,17 @@ int tempcurrentLayer= 0 ;
 
 
 /*******************************************************************END OF DEFINITIONS AND DECLERATIONS*****************************************************/
-
+void timedblink() {
+  currentMillis3 = millis(); 
+  if (currentMillis3 - previousMillis3 >= interval2) { 
+    if (blink3 == 0) {
+      blink3 = 1;
+    } else {
+      blink3 = 0;
+    }
+  previousMillis3 = currentMillis3; // LEAVE THIS ALONE
+	}
+}
 void rgbmap(int row,int column){
   switch (1)
   {
@@ -302,7 +352,6 @@ void rgbmap(int row,int column){
 }
 
 void fadeall() { for(int i = 0; i < NUM_DISLEDS; i++) { leds[i].nscale8(250); } }
-
 
 void rainbowtime() {
 	Serial.print("x");
@@ -330,12 +379,119 @@ void rainbowtime() {
 		// Wait a little bit before we loop around and do it again
   }
 }
-
+void updateDisplay(int timeLeft) {
+  oled.clearDisplay(); // clear display
+  switch (displayLayer) {
+  // boot up screen
+  case 0:
+    oled.clearDisplay(); // clear display
+    oled.setTextSize(2);         // set text size
+    oled.setTextColor(WHITE);    // set text color
+    oled.drawBitmap(0, 0, myBitmap, 128, 64, WHITE);
+    oled.display();
+    break;
+  // calibration screen
+  case 1:
+    oled.clearDisplay(); // clear display
+    oled.setTextSize (2);         // set text size
+    oled.setTextColor(WHITE);    // set text color
+    oled.setCursor(0, 2);       // set position to display (x, y)
+    oled.println(displayText);
+    oled.println(h[currentHall].hallCal());
+    oled.display(); 
+    break;
+  
+  // maintenance mode screen67
+  case 2:
+    oled.setTextSize(1);         // set text size
+    oled.setTextColor(WHITE);    // set text color
+    oled.setCursor(0, 2);       // set position to display (x, y)
+    oled.print("Rotary:");
+    oled.print("BLEKEY:");
+    oled.println(bleKeyboard.isConnected());
+    oled.print("HALL1:");
+    oled.print(h[1].hallReadCal());
+    oled.print(" HALL2:");
+    oled.print(h[2].hallReadCal());
+    oled.print(" HALL3:");
+    oled.println(h[3].hallReadCal());
+    oled.print("TempLayer");
+    oled.println(tempcurrentLayer);
+    //oled.print("ReadAngle: ");
+    //oled.println(as5600.readAngle());
+    oled.print("RawAngle: ");
+    oled.println(as5600.rawAngle());
+    //oled.println(as5600.rawAngle() * AS5600_RAW_TO_DEGREES);
+    //oled.print("Cumulative: ");
+    //oled.println(as5600.getCumulativePosition());
+    //oled.print("Revolutions: ");
+    //oled.println(as5600.getRevolutions());
+    //oled.print("RPM: ");
+    //oled.println(rpm);
+    oled.print("Cycletime: ");
+    oled.println(duration);
+    oled.print("BLINK3: ");
+    oled.println(blink3);
+    oled.display();
+    break;
+  case 3:
+    oled.clearDisplay();
+    oled.setTextSize(2);
+    oled.setTextColor(WHITE);
+    oled.setCursor(0, 0);
+    oled.print("Time: ");
+    oled.print(timeLeft / 60);
+    oled.print(":");
+    oled.print(timeLeft % 60);
+    oled.setCursor(0, 32);
+    oled.print("Layer: ");
+    oled.print(currentLayer);
+    oled.display();
+    break;
+  default:
+    oled.display();
+    break;
+  }
+  }
 void calibrateHallButtons() {
-  while(millis() <15000) {
-    h1.hallCal();
-    h2.hallCal();
-    h3.hallCal();
+  int startTimer = 0;
+  int timerSet = 5000;//millis
+  bool calibrationComplete = false;
+  bool arrayCalibrationComplete = false;
+  currentHall = 1;
+  displayLayer=1;
+
+  while(currentHall <= 3) {
+    calibrationComplete = 0;
+    while(!calibrationComplete) {
+ 
+      while(h[currentHall].checkHallTrig(1) == 0) {
+        displayText = "PRESS HALL " + String(currentHall);
+        updateDisplay(0);
+      }
+      startTimer = millis();
+      arrayCalibrationComplete = 0;
+      while((h[currentHall].checkHallTrig(1) == 1) && (!arrayCalibrationComplete)) {
+        h[currentHall].hallCal();
+        if ((startTimer + (timerSet / 2)) > millis()) {
+          displayText = "FULLY PRESS";
+          updateDisplay(0); 
+        }
+        else if ((startTimer + (timerSet/2)+(timerSet / 4)) > millis()) {
+          displayText = "ALMOST THERE";
+          updateDisplay(0);
+        }
+        else if((startTimer + timerSet) < millis()) {
+          displayText = "HALL " + String(currentHall) + " CALIBRATED";
+          updateDisplay(0);
+          delay(1500);
+          arrayCalibrationComplete = 1;
+          calibrationComplete = 1;
+          currentHall++;
+        }
+        updateDisplay(0);
+      }
+    }  
   }
 }
 void updateLEDs(int timeLeft, int totalTime) {
@@ -361,8 +517,8 @@ void handleEncoder() {
   currentEncoderValue = as5600.rawAngle();
 }
 void checkHallPress() {
-  if(h1.hallReadCal() == 0) {
-    while(h1.hallReadCal() == 0) {
+  if(h[0].hallReadCal() == 0) {
+    while(h[0].hallReadCal() == 0) {
     bleKeyboard.print("HALL1");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -372,8 +528,8 @@ void checkHallPress() {
     }
 
   }
-  if(h2.hallReadCal() == 0) {
-    while(h2.hallReadCal() == 0) {
+  if(h[1].hallReadCal() == 0) {
+    while(h[1].hallReadCal() == 0) {
     bleKeyboard.print("HALL2");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -382,8 +538,8 @@ void checkHallPress() {
     oled.display();
     }
   }
-  if(h3.hallReadCal() == 0) {
-    while(h3.hallReadCal() == 0) {
+  if(h[2].hallReadCal() == 0) {
+    while(h[2].hallReadCal() == 0) {
     bleKeyboard.print("HALL3");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -437,65 +593,7 @@ void changeLayer(int layermode) {
   }
 }
 
-void updateDisplay(int timeLeft , int screenLayer ) {
-  oled.clearDisplay(); // clear display
-  switch (screenLayer) {
-  case 0:
-    oled.setTextSize(2);         // set text size
-    oled.setTextColor(WHITE);    // set text color
-    oled.clearDisplay();
-    oled.drawBitmap(0, 0, myBitmap, 128, 64, WHITE);
-    oled.display();
-    break;
-  case 2:
-    oled.setTextSize(1);         // set text size
-    oled.setTextColor(WHITE);    // set text color
-    oled.setCursor(0, 2);       // set position to display (x, y)
-    oled.print("Rotary:");
-    oled.print("BLEKEY:");
-    oled.println(bleKeyboard.isConnected());
-    oled.print("HALL1:");
-    oled.print(h1.hallReadClean());
-    oled.print(" HALL2:");
-    oled.print(h2.hallReadClean());
-    oled.print(" HALL3:");
-    oled.println(h3.hallReadClean());
-    oled.print("TempLayer");
-    oled.println(tempcurrentLayer);
-    //oled.print("ReadAngle: ");
-    //oled.println(as5600.readAngle());
-    oled.print("RawAngle: ");
-    oled.println(as5600.rawAngle());
-    //oled.println(as5600.rawAngle() * AS5600_RAW_TO_DEGREES);
-    //oled.print("Cumulative: ");
-    //oled.println(as5600.getCumulativePosition());
-    //oled.print("Revolutions: ");
-    //oled.println(as5600.getRevolutions());
-    //oled.print("RPM: ");
-    //oled.println(rpm);
-    oled.print("Cycletime: ");
-    oled.println(duration);
-    oled.display();
-    break;
-  case 3:
-    oled.clearDisplay();
-    oled.setTextSize(2);
-    oled.setTextColor(WHITE);
-    oled.setCursor(0, 0);
-    oled.print("Time: ");
-    oled.print(timeLeft / 60);
-    oled.print(":");
-    oled.print(timeLeft % 60);
-    oled.setCursor(0, 32);
-    oled.print("Layer: ");
-    oled.print(currentLayer);
-    oled.display();
-    break;
-  default:
-    oled.display();
-    break;
-  }
-  }
+
 
 void startTimer() {
   startTime = millis();
@@ -538,19 +636,19 @@ void setup() {
   delay(1000);
 
   //Startup Screen
-  updateDisplay(0 , 0);
+  updateDisplay(0);
   delay(3000);
-  
+
+  // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
+  calibrateHallButtons();
 }
 void loop() { 
-  long start = micros();
+  long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
 	unsigned long currentMillis = millis(); 
   unsigned long currentMillis2 = millis(); 
 
   //Everything Within Is Delayed 500MS
   if (currentMillis - previousMillis >= interval) { 
-    
-    
     if (blink){
       leds[STATUS_LED] = CHSV(hue2, 255, 255);
       FastLED.show();
@@ -562,26 +660,21 @@ void loop() {
       blink = 1;
     }
     previousMillis = currentMillis; // LEAVE THIS ALONE
-
   }
 
   //Everything Within Is Delayed 100MS
   if (currentMillis2 - previousMillis2 >= interval2) { 
-
   previousMillis2 = currentMillis2; // LEAVE THIS ALONE
 	}
-
+  //updateLEDs(timeLeft);
   //rainbowtime();
-
-  calibrateHallButtons();
-  checkHallPress();
+  //checkHallPress();
   handleEncoder();
   changeLayer(0);
+  timedblink();
   int timeLeft = getTimeLeft();
-  //updateLEDs(timeLeft, timerDuration);
-  updateDisplay(timeLeft, 2);
-  
+  displayLayer=2;
+  updateDisplay(timeLeft);
   // Add any additional logic or delays as needed
-  duration = micros() - start;
-  Serial.println(duration);
+  duration = micros() - start; // KEEP AT END, FOR TIMER
 }
