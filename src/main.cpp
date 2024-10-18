@@ -61,6 +61,64 @@ int currentEncoderValue = 0;
 int hallsens = 3;
 int currentHall = 1;
 
+// Timer Function to set a timer 
+class TimerX {
+  private:
+    unsigned long previousMillis = 0UL; 
+    unsigned long currentMillis = 0UL;
+    long interval = 1000UL;
+
+  public:
+    bool timerActive = false;
+    TimerX(){
+
+    } 
+
+
+    void startTimer(){
+      previousMillis = millis();
+      timerActive = true;
+    }
+
+    void stopTimer(){
+      timerActive = false;
+    }
+
+    bool checkTimer(){
+      currentMillis = millis();
+      return timerActive && (currentMillis - previousMillis >= interval); //will return true if timer is active and time has passed
+    }
+
+    void resetTimer(){
+      previousMillis = millis();
+    }
+
+    void setIntervalSeconds(long interval){
+      this -> interval = interval * 1000;
+    }
+
+    void setIntervalMinutes(long interval){
+      this -> interval = interval * 60 * 1000;
+    }
+    long getInterval(){
+      return interval;
+    }
+
+    long getTimeLeft(){
+      unsigned long elapsedTime = (millis() - previousMillis) / 1000;
+      long timeLeft = interval - elapsedTime;
+      return timeLeft;
+    }
+
+    unsigned long getPreviousMillis(){
+      return previousMillis;
+    }
+
+    unsigned long getCurrentMillis(){
+      return currentMillis;
+    }
+
+};
 class HallX {
   private:
     static const int averagingSamples =  2;
@@ -295,10 +353,10 @@ const long interval = 500UL;
 unsigned long previousMillis2 = 0UL;
 const long interval2 = 100UL;
 
-// Delay Control 3
+// Delay Control 3 (Function Timer)
 unsigned long previousMillis3 = 0UL;
 unsigned long currentMillis3 = 0UL; 
-const long interval3 = 100UL;
+const long interval3 = 750UL;
 bool blink3 = 0;
 
 // Timer
@@ -314,15 +372,50 @@ int currentLayer = 0;
 const int MAX_LAYERS = 3;
 int tempcurrentLayer= 0 ;
 
+// Task Handler
+TaskHandle_t Task1;
 
 /*******************************************************************END OF DEFINITIONS AND DECLERATIONS*****************************************************/
+
 void timedblink() {
+  int crossValue = CRGB::Black;
+  int indicies [] = {};
   currentMillis3 = millis(); 
-  if (currentMillis3 - previousMillis3 >= interval2) { 
+  if (currentMillis3 - previousMillis3 >= interval3) { 
     if (blink3 == 0) {
       blink3 = 1;
+      leds[20] = CRGB::Blue;
+      leds[21] = CRGB::Blue;
+      leds[22] = CRGB::Blue;
+      leds[23] = CRGB::Blue;
+      leds[24] = CRGB::Blue;
+      leds[25] = CRGB::Blue;
+      leds[26] = CRGB::Blue;
+      leds[27] = CRGB::Blue;
+      leds[28] = CRGB::Blue;
+      leds[29] = CRGB::Blue;
+      leds[6] = CRGB::Blue;
+      leds[13] = CRGB::Blue;
+      leds[33] = CRGB::Blue;
+      leds[46] = CRGB::Blue;
+
+
     } else {
       blink3 = 0;
+      leds[20] = CRGB::White;
+      leds[21] = CRGB::White;
+      leds[22] = CRGB::White;
+      leds[23] = CRGB::White;
+      leds[24] = CRGB::White;
+      leds[25] = CRGB::White;
+      leds[26] = CRGB::White;
+      leds[27] = CRGB::White;
+      leds[28] = CRGB::White;
+      leds[29] = CRGB::White;
+      leds[6] = CRGB::White;
+      leds[13] = CRGB::White;
+      leds[33] = CRGB::White;
+      leds[46] = CRGB::White;
     }
   previousMillis3 = currentMillis3; // LEAVE THIS ALONE
 	}
@@ -432,7 +525,9 @@ void updateDisplay(int timeLeft) {
     oled.println(duration);
     oled.print("BLINK3: ");
     oled.println(blink3);
+    oled.print(xPortGetCoreID());
     oled.display();
+ 
     break;
   case 3:
     oled.clearDisplay();
@@ -455,7 +550,7 @@ void updateDisplay(int timeLeft) {
   }
 void calibrateHallButtons() {
   int startTimer = 0;
-  int timerSet = 5000;//millis
+  int timerSet = 2500;//millis
   bool calibrationComplete = false;
   bool arrayCalibrationComplete = false;
   currentHall = 1;
@@ -515,6 +610,7 @@ void checkMap() {
 
 void handleEncoder() {
   currentEncoderValue = as5600.rawAngle();
+
 }
 void checkHallPress() {
   if(h[0].hallReadCal() == 0) {
@@ -612,8 +708,24 @@ int getTimeLeft() {
   int timeLeft = timerDuration - elapsedTime;
   return timeLeft > 0 ? timeLeft : 0;
 }
-
+void Task1code ( void * pvparameters ) {
+  for(;;) {
+  timedblink();
+  }
+}
 void setup() { 
+  Serial.begin (115200);
+
+
+  xTaskCreatePinnedToCore(
+    Task1code, /* Function to implement the task */
+    "Task1", /* Name of the task */
+    10000, /* Stack size in words */
+    NULL, /* Task input parameter */
+    0, /* Priority of the task */
+    &Task1, /* Task handle. */
+    0); /* Core where the task should run */
+
   //OLED Display
   //oled.setRotation(1); //rotates text on OLED 1=90 degrees, 2=180 degrees
   Wire.begin(SDA0_Pin, SCL0_Pin);
@@ -623,7 +735,7 @@ void setup() {
   }
   
   //Misc IO
-  Serial.begin (115200);
+
 
 
   //Fast LED
@@ -671,10 +783,10 @@ void loop() {
   //checkHallPress();
   handleEncoder();
   changeLayer(0);
-  timedblink();
   int timeLeft = getTimeLeft();
   displayLayer=2;
   updateDisplay(timeLeft);
   // Add any additional logic or delays as needed
+  Serial.println(xPortGetCoreID());
   duration = micros() - start; // KEEP AT END, FOR TIMER
 }
