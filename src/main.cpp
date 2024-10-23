@@ -2,7 +2,7 @@
 Emmanuel Addey
 KRONOS V.2
 10/5/2024
-
+USB BRANCH
 Wiring
 IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 ---------------------------------------------------------
