@@ -564,12 +564,13 @@ void updateDisplay(int timeLeft) {
 void calibrateHallButtons() {
   hallcalibrated = 0;
   int startTimer = 0;
-  int timerSet = 2500;//millis
+  int timerSet = 1500;//millis
   bool calibrationComplete = false;
   bool arrayCalibrationComplete = false;
   currentHall = 1;
   displayLayer=1;
 
+  log_e("Calibration Begin");
   while(currentHall <= 3) {
     calibrationComplete = 0;
     while(!calibrationComplete) {
@@ -741,13 +742,16 @@ void HallScanCode( void * pvparameters) {
       if(hall1.debounce(h[1].checkHallTrig(1)&&hallcalibrated)) {
         bleKeyboard.press(KEY_LEFT_CTRL);
         bleKeyboard.press('c');
+        log_e("HALL 1 PRESSED");
         }
       else if (hall2.debounce(h[2].checkHallTrig(1)&&hallcalibrated)) {
         bleKeyboard.press(KEY_LEFT_CTRL);
         bleKeyboard.press('v');
+        log_e("HALL 2 PRESSED");
       }
       else if (hall3.debounce(h[3].checkHallTrig(1)&&hallcalibrated)) {
         bleKeyboard.print("it's ");
+        log_e("HALL 3 PRESSED");
       }
     }
     bleKeyboard.releaseAll();
@@ -755,8 +759,10 @@ void HallScanCode( void * pvparameters) {
 }
 
 void setup() { 
-  Serial.begin (9600);
+  Serial.begin (115200);
+  Serial.setDebugOutput(true);
 
+  Serial.println("Starting KRONOS!");
   hall1.begin();
   hall2.begin();
   hall3.begin();
@@ -803,10 +809,13 @@ void setup() {
 
   //Startup Screen
   updateDisplay(0);
+  updateDisplay(0); 
+  updateDisplay(0);
   delay(3000);
 
   // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
   calibrateHallButtons();
+  Serial.println("KRNOS INITIALIZED...");
 }
 void loop() { 
   long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
@@ -841,6 +850,5 @@ void loop() {
   displayLayer=2;
   updateDisplay(timeLeft);
   // Add any additional logic or delays as needed
-  Serial.println(xPortGetCoreID());
   duration = micros() - start; // KEEP AT END, FOR TIMER
 }
