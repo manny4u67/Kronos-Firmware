@@ -119,6 +119,32 @@ class TimerX {
     }
 
 };
+//
+class Button
+{
+  private:
+    uint8_t btn;
+    uint16_t state;
+  public:
+    void begin() {
+      state = 0;
+    }
+  bool debounce(bool output) {
+    static uint16_t state = 0;
+    state = (state << 1) | output | 0xfe00;
+    return (state == 0xfe01);
+  }
+};
+
+Button hall1;
+Button hall2;
+Button hall3;
+Button hallall;
+
+bool hallScanC1 = 0;
+bool hallScanC2 = 0;
+bool hallScanC3 = 0;
+
 class HallX {
   private:
     static const int averagingSamples =  2;
@@ -141,6 +167,7 @@ class HallX {
 
   public:
     byte pin;
+    int option=1;
     HallX(byte pin) {
       this->pin = pin;
 
@@ -216,21 +243,11 @@ class HallX {
     bool checkHallTrig(int option){
       switch (option) {
         case 0:
-          if (hallReadCal() < trigPoint) {
-            return true;
-          }   
-          else {
-            return false; 
-          }
+            return hallReadCal() < trigPoint;
         break;
 
         case 1:
-          if(hallRead() < 1300) {
-            return true;
-          }
-          else {
-            return false; 
-          }
+            return hallRead() < 1200;
         break;
 
         default:
@@ -240,12 +257,8 @@ class HallX {
       }
 };
 
-//HallX h1(HALL1); // Hall Effect Sensor 1 Object
-//HallX h2(HALL2); // Hall Effect Sensor 2 Object
-//HallX h3(HALL3); // Hall Effect Sensor 3 Object
-//HallX h[] = {h1, h2, h3};
-
 HallX h[] = {HallX(HALL0), HallX(HALL1), HallX(HALL2), HallX(HALL3)};
+bool hallcalibrated = 0;
 
 // ARGB ARRAY mapping
 const int MAPROWS = 10;
@@ -374,7 +387,7 @@ int tempcurrentLayer= 0 ;
 
 // Task Handler
 TaskHandle_t Task1;
-
+TaskHandle_t HallScan;
 /*******************************************************************END OF DEFINITIONS AND DECLERATIONS*****************************************************/
 
 void timedblink() {
@@ -525,7 +538,7 @@ void updateDisplay(int timeLeft) {
     oled.println(duration);
     oled.print("BLINK3: ");
     oled.println(blink3);
-    oled.print(xPortGetCoreID());
+    oled.print("PID: "); oled.print(xPortGetCoreID()); oled.print(" CAL: "); oled.print(hallcalibrated); oled.print(" K1 "); oled.print(h[1].checkHallTrig(1));
     oled.display();
  
     break;
@@ -549,6 +562,7 @@ void updateDisplay(int timeLeft) {
   }
   }
 void calibrateHallButtons() {
+  hallcalibrated = 0;
   int startTimer = 0;
   int timerSet = 2500;//millis
   bool calibrationComplete = false;
@@ -588,6 +602,7 @@ void calibrateHallButtons() {
       }
     }  
   }
+hallcalibrated = 1;
 }
 void updateLEDs(int timeLeft, int totalTime) {
   int ledsOn = map(timeLeft, 0, totalTime, 0, NUM_LEDS);
@@ -613,8 +628,8 @@ void handleEncoder() {
 
 }
 void checkHallPress() {
-  if(h[0].hallReadCal() == 0) {
-    while(h[0].hallReadCal() == 0) {
+  if(h[1].hallReadCal() == 0) {
+    while(h[1].hallReadCal() == 0) {
     bleKeyboard.print("HALL1");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -624,8 +639,8 @@ void checkHallPress() {
     }
 
   }
-  if(h[1].hallReadCal() == 0) {
-    while(h[1].hallReadCal() == 0) {
+  if(h[2].hallReadCal() == 0) {
+    while(h[2].hallReadCal() == 0) {
     bleKeyboard.print("HALL2");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -634,8 +649,8 @@ void checkHallPress() {
     oled.display();
     }
   }
-  if(h[2].hallReadCal() == 0) {
-    while(h[2].hallReadCal() == 0) {
+  if(h[3].hallReadCal() == 0) {
+    while(h[3].hallReadCal() == 0) {
     bleKeyboard.print("HALL3");
     oled.clearDisplay();
     oled.setCursor(0, 2);
@@ -708,14 +723,44 @@ int getTimeLeft() {
   int timeLeft = timerDuration - elapsedTime;
   return timeLeft > 0 ? timeLeft : 0;
 }
+
 void Task1code ( void * pvparameters ) {
   for(;;) {
   timedblink();
   }
 }
-void setup() { 
-  Serial.begin (115200);
 
+void HallScanCode( void * pvparameters) {
+
+  for(;;) {
+    
+    if(hallall.debounce(h[1].checkHallTrig(1)&&h[2].checkHallTrig(1)&&h[3].checkHallTrig(1)&&hallcalibrated)) {
+      bleKeyboard.print("KRONOS!!");
+    }
+    else{
+      if(hall1.debounce(h[1].checkHallTrig(1)&&hallcalibrated)) {
+        bleKeyboard.press(KEY_LEFT_CTRL);
+        bleKeyboard.press('c');
+        }
+      else if (hall2.debounce(h[2].checkHallTrig(1)&&hallcalibrated)) {
+        bleKeyboard.press(KEY_LEFT_CTRL);
+        bleKeyboard.press('v');
+      }
+      else if (hall3.debounce(h[3].checkHallTrig(1)&&hallcalibrated)) {
+        bleKeyboard.print("it's ");
+      }
+    }
+    bleKeyboard.releaseAll();
+  }
+}
+
+void setup() { 
+  Serial.begin (9600);
+
+  hall1.begin();
+  hall2.begin();
+  hall3.begin();
+  hallall.begin();
 
   xTaskCreatePinnedToCore(
     Task1code, /* Function to implement the task */
@@ -725,6 +770,15 @@ void setup() {
     0, /* Priority of the task */
     &Task1, /* Task handle. */
     0); /* Core where the task should run */
+
+  xTaskCreatePinnedToCore(
+    HallScanCode, /* Function to implement the task */
+    "HallScan", /* Name of the task */
+    10000, /* Stack size in words */
+    NULL, /* Task input parameter */
+    0, /* Priority of the task */
+    &HallScan, /* Task handle. */
+    0); /* Core where the task should run */  
 
   //OLED Display
   //oled.setRotation(1); //rotates text on OLED 1=90 degrees, 2=180 degrees
