@@ -24,7 +24,7 @@ IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 #include <BleKeyboard.h>
 #include <AS5600.h>
 #include <String.h>
-#include "Adafruit_TinyUSB.h"
+#include <Adafruit_TinyUSB.h>
 
 // Data Pins
 #define DATA_PIN 48 // ARGB DATA PIN 
@@ -863,7 +863,7 @@ void setup() {
 
   // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
   calibrateHallButtons();
-  Serial.println("KRNOS INITIALIZED...");
+  Serial.println("KRONOS INITIALIZED...");
 }
 void loop() { 
   uint8_t const report_id = 0;
@@ -874,11 +874,12 @@ void loop() {
 	unsigned long currentMillis = millis(); 
   unsigned long currentMillis2 = millis(); 
 
-  //  if (!TinyUSBDevice.mounted()) {
-  //  return;
-  //}
-
-  //usb_hid.keyboardReport(report_id, modifier, keycode);
+    if (!TinyUSBDevice.mounted()) {
+    log_e("not mounted");
+    return;
+  }
+  log_e("past mount");
+  usb_hid.keyboardReport(report_id, modifier, keycode);
   //Everything Within Is Delayed 500MS
   if (currentMillis - previousMillis >= interval) { 
     if (blink){
