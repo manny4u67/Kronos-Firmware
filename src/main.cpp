@@ -24,6 +24,7 @@ IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 #include <BleKeyboard.h>
 #include <AS5600.h>
 #include <String.h>
+#include "Adafruit_TinyUSB.h"
 
 // Data Pins
 #define DATA_PIN 48 // ARGB DATA PIN 
@@ -357,6 +358,15 @@ const unsigned char myBitmap [] PROGMEM =
  
 //Bluetooth keyboard library stuff
 BleKeyboard bleKeyboard; 
+
+//USB keyboard library stuff
+uint8_t const desc_hid_report[] = {
+    TUD_HID_REPORT_DESC_KEYBOARD()
+};
+
+Adafruit_USBD_HID usb_hid;
+
+
 
 // Delay Control
 unsigned long previousMillis = 0UL;
@@ -758,15 +768,53 @@ void HallScanCode( void * pvparameters) {
   }
 }
 
+/* void hid_report_callback(uint8_t report_id, hid_report_type_t report_type, uint8_t const* buffer, uint16_t bufsize) {
+  (void) report_id;
+  (void) bufsize;
+
+  // LED indicator is output report with only 1 byte length
+  if (report_type != HID_REPORT_TYPE_OUTPUT) return;
+
+  // The LED bit map is as follows: (also defined by KEYBOARD_LED_* )
+  // Kana (4) | Compose (3) | ScrollLock (2) | CapsLock (1) | Numlock (0)
+  uint8_t ledIndicator = buffer[0];
+
+  // turn on LED if capslock is set
+  digitalWrite(LED_BUILTIN, ledIndicator & KEYBOARD_LED_CAPSLOCK);
+} */
 void setup() { 
   Serial.begin (115200);
   Serial.setDebugOutput(true);
-
+ 
   Serial.println("Starting KRONOS!");
   hall1.begin();
   hall2.begin();
   hall3.begin();
   hallall.begin();
+
+  //Beyboard Initialization Check
+  delay(1000);
+    if (!TinyUSBDevice.isInitialized()) {
+    TinyUSBDevice.begin(0);
+  }
+
+  // Setup HID
+  usb_hid.setBootProtocol(HID_ITF_PROTOCOL_KEYBOARD);
+  usb_hid.setPollInterval(2);
+  usb_hid.setReportDescriptor(desc_hid_report, sizeof(desc_hid_report));
+  usb_hid.setStringDescriptor("KRONOS");
+
+  // Set up output report (on control endpoint) for Capslock indicator
+  //usb_hid.setReportCallback(NULL, hid_report_callback); //THIS WILL ALLOW FOR REPORTING STATUS LIKE CAPS LOCK
+
+  usb_hid.begin();
+
+  // If already enumerated, additional class driverr begin() e.g msc, hid, midi won't take effect until re-enumeration
+  if (TinyUSBDevice.mounted()) {
+    TinyUSBDevice.detach();
+    delay(10);
+    TinyUSBDevice.attach();
+  }
 
   xTaskCreatePinnedToCore(
     Task1code, /* Function to implement the task */
@@ -775,7 +823,7 @@ void setup() {
     NULL, /* Task input parameter */
     0, /* Priority of the task */
     &Task1, /* Task handle. */
-    0); /* Core where the task should run */
+    1); /* Core where the task should run */
 
   xTaskCreatePinnedToCore(
     HallScanCode, /* Function to implement the task */
@@ -784,7 +832,7 @@ void setup() {
     NULL, /* Task input parameter */
     0, /* Priority of the task */
     &HallScan, /* Task handle. */
-    0); /* Core where the task should run */  
+    1); /* Core where the task should run */  
 
   //OLED Display
   //oled.setRotation(1); //rotates text on OLED 1=90 degrees, 2=180 degrees
@@ -818,10 +866,19 @@ void setup() {
   Serial.println("KRNOS INITIALIZED...");
 }
 void loop() { 
+  uint8_t const report_id = 0;
+  uint8_t const modifier = 0;
+  uint8_t keycode [6] = {0x04, 0x00, 0x00, 0x00, 0x00, 0x00};
   long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
+
 	unsigned long currentMillis = millis(); 
   unsigned long currentMillis2 = millis(); 
 
+  //  if (!TinyUSBDevice.mounted()) {
+  //  return;
+  //}
+
+  //usb_hid.keyboardReport(report_id, modifier, keycode);
   //Everything Within Is Delayed 500MS
   if (currentMillis - previousMillis >= interval) { 
     if (blink){
