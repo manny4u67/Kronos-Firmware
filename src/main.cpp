@@ -407,38 +407,11 @@ void timedblink() {
   if (currentMillis3 - previousMillis3 >= interval3) { 
     if (blink3 == 0) {
       blink3 = 1;
-      leds[20] = CRGB::Blue;
-      leds[21] = CRGB::Blue;
-      leds[22] = CRGB::Blue;
-      leds[23] = CRGB::Blue;
-      leds[24] = CRGB::Blue;
-      leds[25] = CRGB::Blue;
-      leds[26] = CRGB::Blue;
-      leds[27] = CRGB::Blue;
-      leds[28] = CRGB::Blue;
-      leds[29] = CRGB::Blue;
-      leds[6] = CRGB::Blue;
-      leds[13] = CRGB::Blue;
-      leds[33] = CRGB::Blue;
-      leds[46] = CRGB::Blue;
-
+fill_solid( leds, NUM_LEDS, CRGB::Red);
 
     } else {
       blink3 = 0;
-      leds[20] = CRGB::White;
-      leds[21] = CRGB::White;
-      leds[22] = CRGB::White;
-      leds[23] = CRGB::White;
-      leds[24] = CRGB::White;
-      leds[25] = CRGB::White;
-      leds[26] = CRGB::White;
-      leds[27] = CRGB::White;
-      leds[28] = CRGB::White;
-      leds[29] = CRGB::White;
-      leds[6] = CRGB::White;
-      leds[13] = CRGB::White;
-      leds[33] = CRGB::White;
-      leds[46] = CRGB::White;
+fill_solid( leds, NUM_LEDS, CRGB::White);
     }
   previousMillis3 = currentMillis3; // LEAVE THIS ALONE
 	}
@@ -574,7 +547,7 @@ void updateDisplay(int timeLeft) {
 void calibrateHallButtons() {
   hallcalibrated = 0;
   int startTimer = 0;
-  int timerSet = 1500;//millis
+  int timerSet = 500;//millis
   bool calibrationComplete = false;
   bool arrayCalibrationComplete = false;
   currentHall = 1;
@@ -611,7 +584,7 @@ void calibrateHallButtons() {
         }
         updateDisplay(0);
       }
-    }  
+    }
   }
 hallcalibrated = 1;
 }
