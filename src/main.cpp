@@ -6,13 +6,18 @@ KRONOS V.2
 Wiring
 IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 ---------------------------------------------------------
-17      SCL0_Pin    Digital   I2C       Yes     SCL Serial
-18      SDA0_Pin    Digital   I2C       Yes     SDA Serial
+17      SDA0_Pin    Digital   I2C       Yes     SDA Serial
+18      SCL0_Pin    Digital   I2C       Yes     SCL Serial
 9       HALL1       Analog    Input     N/A     Hall Effect Sensor
 10      HALL2       Analog    Input     N/A     Hall Effect Sensor
-14      HALL3       Analog    Input     N/A     Hall Effect Sensor
 35                  Digital   FastLED   N/A     Button RGBs
 48                  Digital   FastLED   N/A     RGB Array
+
+I2C Address
+---------------------------------------------------------
+OLED SSD1306 0x3C
+ADS1_0x49
+ADS2_0x48
 ***************************************************************/
 
 #include <Arduino.h>
@@ -24,24 +29,24 @@ IO Pin  Variable    Type    IO Mode   Pull-up   Hardware
 #include <BleKeyboard.h>
 #include <AS5600.h>
 #include <String.h>
+#include <Adafruit_ADS1X15.h>
 
 // Data Pins
 #define DATA_PIN 48 // ARGB DATA PIN 
-#define DATA_PIN2 38 // ARGB DATA PIN 2
-#define SDA0_Pin 18   // ESP32 SDA PIN
-#define SCL0_Pin 17   // ESP32 SCL PIN
+#define DATA_PIN2 35 // ARGB DATA PIN 2
+#define SDA0_Pin 17  // ESP32 SDA PIN
+#define SCL0_Pin 18   // ESP32 SCL PIN
+#define SCRLBUTTON 3 // BUTTON PIN
 
-// For ARGB ARRAY 5 X 10 + 1
-#define NUM_LEDS 51 // ***Delete this when new board is made
-#define NUM_DISLEDS 50 // ***Will need new logic when new board is made
+// For ARGB ARRAY (75 LEDS)
+#define NUM_LEDS 75 // ***Delete this when new board is made
 #define ARGB_CHIPSET WS2812B
-#define STATUS_LED 50 // ***Change to 0 for new board
 static uint8_t hue = 0;
 static uint8_t hue2 = 100;
 CRGB leds[NUM_LEDS];
 
-// For Addressable LEDS 2
-#define NUM_LEDS2 3 
+// For BUTTON ARRAY (6 LEDS *5 WORKING)
+#define NUM_LEDS2 6 
 CRGB leds2[NUM_LEDS2];
 
 // Hall Effect Rotary Encoder
@@ -53,11 +58,17 @@ int lastEncoderValue = 0;
 int currentEncoderValue = 0;
 
 
-// Hall Effect Button Control
-#define HALL0 3 // HALL EFFECT SENSOR 0 GPIO
-#define HALL1 9 // HALL EFFECT SENSOR 1 GPIO
-#define HALL2 10 // HALL EFFECT SENSOR 2 GPIO
-#define HALL3 14 // HALL EFFECT SENSOR 3 GPIO
+// Hall Effect Button Control (ADC)
+Adafruit_ADS1115 ads1;
+Adafruit_ADS1115 ads2;
+
+#define HALL1 0 // HALL EFFECT SENSOR 1 GPIO
+#define HALL2 1 // HALL EFFECT SENSOR 2 GPIO
+#define HALL3 2 // HALL EFFECT SENSOR 2 GPIO
+#define HALL4 0 // HALL EFFECT SENSOR 2 GPIO
+#define HALL5 1 // HALL EFFECT SENSOR 2 GPIO
+#define HALL6 2 // HALL EFFECT SENSOR 2 GPIO
+
 int hallsens = 3;
 int currentHall = 1;
 
@@ -145,7 +156,7 @@ bool hallScanC1 = 0;
 bool hallScanC2 = 0;
 bool hallScanC3 = 0;
 
-class HallX {
+class ADCHALLX {
   private:
     static const int averagingSamples =  2;
     int readIndex = 0;
@@ -153,10 +164,11 @@ class HallX {
     int average = 0; // used in hallReadClean
     int precision = 1; // precison 1 = 128 2= 256 3 = 512 4 = 1024 5 = 2048
     int trigPoint = 0;
-    int value; 
+    int16_t value; 
     int readings[averagingSamples]; // used in hallReadClean
     int minVal=4095;
     int maxVal=0;
+    int adcsel=0;
  
     // check if AS5600 library is included
     #if __has_include (<AS5600.h>)
@@ -166,23 +178,57 @@ class HallX {
     #endif
 
   public:
-    byte pin;
+    byte channel;
     int option=1;
-    HallX(byte pin) {
-      this->pin = pin;
-
+    ADCHALLX(byte channel) {
+      this->channel = channel;
     }
 
+
+bool setI2C(String CONN){
+    if (CONN == "GND"){
+
+        if (!ads1.begin(0x48)){
+            log_e("Failed to initialize ADS1115 at 0x49");
+            for(;;);
+        }
+        adcsel = 0;
+        return 1;
+    } else if (CONN == "VDD"){
+       
+        if (!ads2.begin(0x49)) {
+            log_e("Failed to initialize ADS1115 at 0x48");
+            for(;;);
+        }
+        adcsel  = 1;
+        return 1;
+    } else if (CONN == "SDA"){
+        adcsel = 2;
+        return 1;
+    } else if (CONN == "SCL"){
+        adcsel = 3;
+        return 1;
+    }
+}
+    int16_t readADX(){
+      if(adcsel == 0){
+        return ads1.readADC_SingleEnded(channel);
+      }
+      else if(adcsel == 1){
+        return ads2.readADC_SingleEnded(channel);
+      }
+      return 0;
+    }
     // Return raw sensor value from 0 to 4095
     int hallRead(){
-      value = analogRead(pin);
+      value = readADX();
       return value;
     }
 
     // Set the min and max hall analog values
     int hallCal(){
       // record hall analog max value
-      value = analogRead(pin);
+      value = readADX();
       if (value > maxVal) {
         maxVal = value;
       }
@@ -202,10 +248,11 @@ class HallX {
     int hallReadCal(){
       int mapMax;
       mapMax = precision * 128;
-      value = analogRead(pin)-35; // record hall analog value
+      value = readADX()-0; // record hall analog value
       value = constrain(value, minVal, maxVal); // in case the hall analog value is outside the range seen during calibration67
       value = map(value, minVal, maxVal, 0, mapMax); // map the hall analog value to a range from 0 to 1000
       return value;
+      Serial.println(value);
     }
 
     // return hall analog value with calibration and noise reduction !!SLOW!!
@@ -247,7 +294,7 @@ class HallX {
         break;
 
         case 1:
-            return hallRead() < 1200;
+            return hallRead() > 10000;
         break;
 
         default:
@@ -257,7 +304,7 @@ class HallX {
       }
 };
 
-HallX h[] = {HallX(HALL0), HallX(HALL1), HallX(HALL2), HallX(HALL3)};
+ADCHALLX h[] = {ADCHALLX(HALL1), ADCHALLX(HALL2), ADCHALLX(HALL3), ADCHALLX(HALL4) ,ADCHALLX(HALL5) ,ADCHALLX(HALL6)};
 bool hallcalibrated = 0;
 
 // ARGB ARRAY mapping
@@ -457,12 +504,12 @@ void rgbmap(int row,int column){
 
 }
 
-void fadeall() { for(int i = 0; i < NUM_DISLEDS; i++) { leds[i].nscale8(250); } }
+void fadeall() { for(int i = 0; i < NUM_LEDS; i++) { leds[i].nscale8(250); } }
 
 void rainbowtime() {
 	Serial.print("x");
 	// First slide the led in one direction
-	for(int i = 0; i < NUM_DISLEDS; i++) {
+	for(int i = 0; i < NUM_LEDS; i++) {
 		// Set the i'th led to red 
 		leds[i] = CHSV(hue++, 255, 255);
 		// Show the leds
@@ -474,7 +521,7 @@ void rainbowtime() {
   	Serial.print("x");
 
 	// Now go in the other direction.  
-	for(int i = (NUM_DISLEDS)-1; i >= 0; i--) {
+	for(int i = (NUM_LEDS)-1; i >= 0; i--) {
 		// Set the i'th led to red 
 		leds[i] = CHSV(hue++, 255, 255);
 		// Show the leds
@@ -507,7 +554,7 @@ void updateDisplay(int timeLeft) {
     oled.display(); 
     break;
   
-  // maintenance mode screen67
+  // maintenance mode screen 2
   case 2:
     oled.setTextSize(1);         // set text size
     oled.setTextColor(WHITE);    // set text color
@@ -515,30 +562,14 @@ void updateDisplay(int timeLeft) {
     oled.print("Rotary:");
     oled.print("BLEKEY:");
     oled.println(bleKeyboard.isConnected());
-    oled.print("HALL1:");
-    oled.print(h[1].hallReadCal());
-    oled.print(" HALL2:");
-    oled.print(h[2].hallReadCal());
-    oled.print(" HALL3:");
-    oled.println(h[3].hallReadCal());
-    oled.print("TempLayer");
-    oled.println(tempcurrentLayer);
-    //oled.print("ReadAngle: ");
-    //oled.println(as5600.readAngle());
-    oled.print("RawAngle: ");
-    oled.println(as5600.rawAngle());
-    //oled.println(as5600.rawAngle() * AS5600_RAW_TO_DEGREES);
-    //oled.print("Cumulative: ");
-    //oled.println(as5600.getCumulativePosition());
-    //oled.print("Revolutions: ");
-    //oled.println(as5600.getRevolutions());
-    //oled.print("RPM: ");
-    //oled.println(rpm);
+    oled.print("H1: "); oled.print(h[0].hallRead()); oled.print(" H2: "); oled.println(h[1].hallRead()); 
+    oled.print("H3: "); oled.print(h[2].hallRead()); oled.print(" H4: "); oled.println(h[3].hallRead()); 
+    oled.print("H5: "); oled.print(h[4].hallRead()); oled.print(" H6: "); oled.println(h[5].hallRead()); 
+    oled.print("TMPL"); oled.print(tempcurrentLayer);
+    oled.print("RAWANG: "); oled.println(as5600.rawAngle());
     oled.print("Cycletime: ");
     oled.println(duration);
-    oled.print("BLINK3: ");
-    oled.println(blink3);
-    oled.print("PID: "); oled.print(xPortGetCoreID()); oled.print(" CAL: "); oled.print(hallcalibrated); oled.print(" K1 "); oled.print(h[1].checkHallTrig(1));
+    oled.print(" CAL: "); oled.print(hallcalibrated);
     oled.display();
  
     break;
@@ -563,15 +594,15 @@ void updateDisplay(int timeLeft) {
   }
 void calibrateHallButtons() {
   hallcalibrated = 0;
+  int numHalls = 6;
   int startTimer = 0;
   int timerSet = 1500;//millis
   bool calibrationComplete = false;
   bool arrayCalibrationComplete = false;
-  currentHall = 1;
+  currentHall = 0;
   displayLayer=1;
 
-  log_e("Calibration Begin");
-  while(currentHall <= 3) {
+  while(currentHall <= (numHalls-1)) {
     calibrationComplete = 0;
     while(!calibrationComplete) {
  
@@ -693,7 +724,8 @@ void changeLayer(int layermode) {
       leds2[1] = CRGB::Black;
       leds2[2] = CRGB::White;
     }
-    FastLED.setBrightness(tempcurrentLayer);
+    //FastLED.setBrightness(tempcurrentLayer);
+    FastLED.setBrightness(25);
   FastLED.show();
   break;
   case 1:
@@ -757,43 +789,69 @@ void HallScanCode( void * pvparameters) {
     bleKeyboard.releaseAll();
   }
 }
-
+void solidColor(CRGB* leds, int numLeds, CRGB color) {
+  for(int i = 0; i < numLeds; i++) {
+    leds[i] = color;
+    FastLED.show();
+  }
+  FastLED.show();
+}
 void setup() { 
   Serial.begin (115200);
   Serial.setDebugOutput(true);
+  log_e("Serial Initialized!");
+
+  Wire.begin(SCL0_Pin, SDA0_Pin );
+  log_e("Wire Initialized!");
 
   Serial.println("Starting KRONOS!");
+  ads1.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV (default)
+  ads2.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV (default)
+  h[0].setI2C("GND");
+  log_e("H1 Initialized!");
+  h[1].setI2C("GND");
+  log_e("H2 Initialized!");
+  h[2].setI2C("GND");
+  log_e("H3 Initialized!");
+  h[3].setI2C("VDD");
+  log_e("H4 Initialized!");
+  h[4].setI2C("VDD");
+  log_e("H5 Initialized!");
+  h[5].setI2C("VDD");
+  log_e("H6 Initialized!");
+
   hall1.begin();
   hall2.begin();
   hall3.begin();
   hallall.begin();
+  log_e("Halls Begun!");
 
-  xTaskCreatePinnedToCore(
-    Task1code, /* Function to implement the task */
-    "Task1", /* Name of the task */
-    10000, /* Stack size in words */
-    NULL, /* Task input parameter */
-    0, /* Priority of the task */
-    &Task1, /* Task handle. */
-    0); /* Core where the task should run */
+  //xTaskCreatePinnedToCore(
+  //  Task1code, /* Function to implement the task */
+  //  "Task1", /* Name of the task */
+  //  10000, /* Stack size in words */
+  //  NULL, /* Task input parameter */
+  //  0, /* Priority of the task */
+  //  &Task1, /* Task handle. */
+  // 1); /* Core where the task should run */
 
-  xTaskCreatePinnedToCore(
-    HallScanCode, /* Function to implement the task */
-    "HallScan", /* Name of the task */
-    10000, /* Stack size in words */
-    NULL, /* Task input parameter */
-    0, /* Priority of the task */
-    &HallScan, /* Task handle. */
-    0); /* Core where the task should run */  
+  //xTaskCreatePinnedToCore(
+  //  HallScanCode, /* Function to implement the task */
+  //  "HallScan", /* Name of the task */
+  //  10000, /* Stack size in words */
+  //  NULL, /* Task input parameter */
+  //  0, /* Priority of the task */
+  //  &HallScan, /* Task handle. */
+  //  1); /* Core where the task should run */  
 
   //OLED Display
   //oled.setRotation(1); //rotates text on OLED 1=90 degrees, 2=180 degrees
-  Wire.begin(SDA0_Pin, SCL0_Pin);
+
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
     while (1);
   }
-  
+  log_e("OLED Intialized!");
   //Misc IO
 
 
@@ -801,46 +859,30 @@ void setup() {
   //Fast LED
 	FastLED.addLeds<ARGB_CHIPSET,DATA_PIN,RGB>(leds,NUM_LEDS);
 	FastLED.addLeds<ARGB_CHIPSET,DATA_PIN2,RGB>(leds2,NUM_LEDS2);
-	FastLED.setBrightness(25);
-  
+  FastLED.clear();
+  FastLED.setBrightness(30);
+  solidColor(leds,NUM_LEDS,CRGB::White);
+  FastLED.show();
+  log_e("FASTLED Intialized!");
+
   //Keyboard
   bleKeyboard.begin();
   delay(1000);
+  log_e("BLEKEYBOARD Intialized!");
 
   //Startup Screen
-  updateDisplay(0);
-  updateDisplay(0); 
   updateDisplay(0);
   delay(3000);
 
   // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
   calibrateHallButtons();
+  log_e("Calibration Complete!");
+
   Serial.println("KRNOS INITIALIZED...");
 }
 void loop() { 
   long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
-	unsigned long currentMillis = millis(); 
-  unsigned long currentMillis2 = millis(); 
 
-  //Everything Within Is Delayed 500MS
-  if (currentMillis - previousMillis >= interval) { 
-    if (blink){
-      leds[STATUS_LED] = CHSV(hue2, 255, 255);
-      FastLED.show();
-      blink = 0;
-    }
-    else {
-      leds[STATUS_LED] = CHSV(hue2, 255, 0);
-      FastLED.show(); 
-      blink = 1;
-    }
-    previousMillis = currentMillis; // LEAVE THIS ALONE
-  }
-
-  //Everything Within Is Delayed 100MS
-  if (currentMillis2 - previousMillis2 >= interval2) { 
-  previousMillis2 = currentMillis2; // LEAVE THIS ALONE
-	}
   //updateLEDs(timeLeft);
   //rainbowtime();
   //checkHallPress();
@@ -849,6 +891,5 @@ void loop() {
   int timeLeft = getTimeLeft();
   displayLayer=2;
   updateDisplay(timeLeft);
-  // Add any additional logic or delays as needed
   duration = micros() - start; // KEEP AT END, FOR TIMER
 }
