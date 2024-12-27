@@ -68,6 +68,7 @@ Adafruit_ADS1115 ads2;
 #define HALL4 0 // HALL EFFECT SENSOR 2 GPIO
 #define HALL5 1 // HALL EFFECT SENSOR 2 GPIO
 #define HALL6 2 // HALL EFFECT SENSOR 2 GPIO
+int t = 1;
 
 int hallsens = 3;
 int currentHall = 1;
@@ -188,7 +189,7 @@ class ADCHALLX {
 bool setI2C(String CONN){
     if (CONN == "GND"){
 
-        if (!ads1.begin(0x48)){
+        if (!ads1.begin(0x49)){
             log_e("Failed to initialize ADS1115 at 0x49");
             for(;;);
         }
@@ -196,7 +197,7 @@ bool setI2C(String CONN){
         return 1;
     } else if (CONN == "VDD"){
        
-        if (!ads2.begin(0x49)) {
+        if (!ads2.begin(0x48)) {
             log_e("Failed to initialize ADS1115 at 0x48");
             for(;;);
         }
@@ -534,6 +535,12 @@ void rainbowtime() {
 }
 void updateDisplay(int timeLeft) {
   oled.clearDisplay(); // clear display
+    //int h1= h[0].hallRead();
+    //int h2= h[1].hallRead();
+    //int h3= h[2].hallRead();
+    //int h4= h[3].hallRead();
+    //int h5= h[4].hallRead();
+    int h6= h[5].hallRead();
   switch (displayLayer) {
   // boot up screen
   case 0:
@@ -562,9 +569,11 @@ void updateDisplay(int timeLeft) {
     oled.print("Rotary:");
     oled.print("BLEKEY:");
     oled.println(bleKeyboard.isConnected());
-    oled.print("H1: "); oled.print(h[0].hallRead()); oled.print(" H2: "); oled.println(h[1].hallRead()); 
-    oled.print("H3: "); oled.print(h[2].hallRead()); oled.print(" H4: "); oled.println(h[3].hallRead()); 
-    oled.print("H5: "); oled.print(h[4].hallRead()); oled.print(" H6: "); oled.println(h[5].hallRead()); 
+
+    //oled.print("H1: "); oled.print(h1); oled.print(" H2: "); oled.println(h2); 
+    //oled.print("H3: "); oled.print(h3); //oled.print(" H4: "); oled.println(h4); 
+    //oled.print("H5: "); oled.print(h5); 
+    oled.print(" H6: "); oled.println(h6); 
     oled.print("TMPL"); oled.print(tempcurrentLayer);
     oled.print("RAWANG: "); oled.println(as5600.rawAngle());
     oled.print("Cycletime: ");
@@ -625,7 +634,7 @@ void calibrateHallButtons() {
         else if((startTimer + timerSet) < millis()) {
           displayText = "HALL " + String(currentHall) + " CALIBRATED";
           updateDisplay(0);
-          delay(1500);
+          delay(1000);
           arrayCalibrationComplete = 1;
           calibrationComplete = 1;
           currentHall++;
@@ -875,19 +884,24 @@ void setup() {
   delay(3000);
 
   // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
-  calibrateHallButtons();
+
   log_e("Calibration Complete!");
 
   Serial.println("KRNOS INITIALIZED...");
+  
 }
 void loop() { 
+  while( t==1){
+    calibrateHallButtons();
+    t=0;
+  }
   long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
 
   //updateLEDs(timeLeft);
   //rainbowtime();
   //checkHallPress();
   handleEncoder();
-  changeLayer(0);
+  //changeLayer(0);
   int timeLeft = getTimeLeft();
   displayLayer=2;
   updateDisplay(timeLeft);
