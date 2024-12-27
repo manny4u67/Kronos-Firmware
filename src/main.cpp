@@ -21,7 +21,7 @@ ADS2_0x48
 ***************************************************************/
 
 #include <Arduino.h>
-#include <SPI.h>
+#include <Wire.h>
 #include <FastLED.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -307,24 +307,6 @@ bool setI2C(String CONN){
 ADCHALLX h[] = {ADCHALLX(HALL1), ADCHALLX(HALL2), ADCHALLX(HALL3), ADCHALLX(HALL4) ,ADCHALLX(HALL5) ,ADCHALLX(HALL6)};
 bool hallcalibrated = 0;
 
-// ARGB ARRAY mapping
-const int MAPROWS = 10;
-const int MAPCOLS = 5;
-int displayrow;
-int displaycol;
-int ledmap[MAPROWS][MAPCOLS]={
-  {0, 19, 20, 39, 40},
-  {1, 18, 21, 38, 41}, 
-  {2, 17, 22, 37, 42}, 
-  {3, 16, 23, 36, 43}, 
-  {4, 15, 24, 35, 44}, 
-  {5, 14, 25, 34, 45}, 
-  {6, 13, 26, 33, 46}, 
-  {7, 12, 27, 32, 47}, 
-  {8, 11, 28, 31, 48}, 
-  {9, 10, 29, 30, 49}
-};
-
 // OLED Display
 #define SCREEN_WIDTH 128 // OLED width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED height, in pixels
@@ -409,16 +391,6 @@ BleKeyboard bleKeyboard;
 unsigned long previousMillis = 0UL;
 const long interval = 500UL;
 
-// Delay Control 2
-unsigned long previousMillis2 = 0UL;
-const long interval2 = 100UL;
-
-// Delay Control 3 (Function Timer)
-unsigned long previousMillis3 = 0UL;
-unsigned long currentMillis3 = 0UL; 
-const long interval3 = 750UL;
-bool blink3 = 0;
-
 // Timer
 bool blink= 0;
 unsigned long startTime;
@@ -433,105 +405,10 @@ const int MAX_LAYERS = 3;
 int tempcurrentLayer= 0 ;
 
 // Task Handler
-TaskHandle_t Task1;
-TaskHandle_t HallScan;
+
 /*******************************************************************END OF DEFINITIONS AND DECLERATIONS*****************************************************/
 
-void timedblink() {
-  int crossValue = CRGB::Black;
-  int indicies [] = {};
-  currentMillis3 = millis(); 
-  if (currentMillis3 - previousMillis3 >= interval3) { 
-    if (blink3 == 0) {
-      blink3 = 1;
-      leds[20] = CRGB::Blue;
-      leds[21] = CRGB::Blue;
-      leds[22] = CRGB::Blue;
-      leds[23] = CRGB::Blue;
-      leds[24] = CRGB::Blue;
-      leds[25] = CRGB::Blue;
-      leds[26] = CRGB::Blue;
-      leds[27] = CRGB::Blue;
-      leds[28] = CRGB::Blue;
-      leds[29] = CRGB::Blue;
-      leds[6] = CRGB::Blue;
-      leds[13] = CRGB::Blue;
-      leds[33] = CRGB::Blue;
-      leds[46] = CRGB::Blue;
 
-
-    } else {
-      blink3 = 0;
-      leds[20] = CRGB::White;
-      leds[21] = CRGB::White;
-      leds[22] = CRGB::White;
-      leds[23] = CRGB::White;
-      leds[24] = CRGB::White;
-      leds[25] = CRGB::White;
-      leds[26] = CRGB::White;
-      leds[27] = CRGB::White;
-      leds[28] = CRGB::White;
-      leds[29] = CRGB::White;
-      leds[6] = CRGB::White;
-      leds[13] = CRGB::White;
-      leds[33] = CRGB::White;
-      leds[46] = CRGB::White;
-    }
-  previousMillis3 = currentMillis3; // LEAVE THIS ALONE
-	}
-}
-void rgbmap(int row,int column){
-  switch (1)
-  {
-  case 1:
-    leds[ledmap[row][column]] = CRGB::White;
-    FastLED.show();
-  break;
-
-  case 2:
-    for(int i = 0; i < NUM_LEDS; i++) {
-    leds[i] = CRGB::Black;
-    }
-    leds[ledmap[row][column]] = CRGB::White;
-    FastLED.show();
-  break;
-
-  default:
-
-  break;
-  }
-
-
-}
-
-void fadeall() { for(int i = 0; i < NUM_LEDS; i++) { leds[i].nscale8(250); } }
-
-void rainbowtime() {
-	Serial.print("x");
-	// First slide the led in one direction
-	for(int i = 0; i < NUM_LEDS; i++) {
-		// Set the i'th led to red 
-		leds[i] = CHSV(hue++, 255, 255);
-		// Show the leds
-		FastLED.show(); 
-		// now that we've shown the leds, reset the i'th led to black
-		// leds[i] = CRGB::Black;
-		fadeall();
-	}
-  	Serial.print("x");
-
-	// Now go in the other direction.  
-	for(int i = (NUM_LEDS)-1; i >= 0; i--) {
-		// Set the i'th led to red 
-		leds[i] = CHSV(hue++, 255, 255);
-		// Show the leds
-		FastLED.show();
-		// now that we've shown the leds, reset the i'th led to black
-		// leds[i] = CRGB::Black;
-		fadeall();
-		// Wait a little bit before we loop around and do it again
-  }
-}
 void updateDisplay(int timeLeft) {
   oled.clearDisplay(); // clear display
   switch (displayLayer) {
@@ -596,7 +473,7 @@ void calibrateHallButtons() {
   hallcalibrated = 0;
   int numHalls = 6;
   int startTimer = 0;
-  int timerSet = 1500;//millis
+  int timerSet = 500;//millis
   bool calibrationComplete = false;
   bool arrayCalibrationComplete = false;
   currentHall = 0;
@@ -636,159 +513,11 @@ void calibrateHallButtons() {
   }
 hallcalibrated = 1;
 }
-void updateLEDs(int timeLeft, int totalTime) {
-  int ledsOn = map(timeLeft, 0, totalTime, 0, NUM_LEDS);
-  for (int i = 0; i < NUM_LEDS; i++) {
-    if (i < ledsOn) {
-      leds[i] = CRGB::White;
-    } else {
-      leds[i] = CRGB::Black;
-    }
-  }
-  FastLED.show();
-}
-void checkMap() {
-  for(int row = 0; row < MAPROWS; row++) {
-    for(int column = 0; column < MAPCOLS; column++) {
-      rgbmap(row, column);
-    }
-  } 
-}
 
 void handleEncoder() {
   currentEncoderValue = as5600.rawAngle();
-
-}
-void checkHallPress() {
-  if(h[1].hallReadCal() == 0) {
-    while(h[1].hallReadCal() == 0) {
-    bleKeyboard.print("HALL1");
-    oled.clearDisplay();
-    oled.setCursor(0, 2);
-    oled.setTextSize(2);
-    oled.print("HALL1");
-    oled.display();
-    }
-
-  }
-  if(h[2].hallReadCal() == 0) {
-    while(h[2].hallReadCal() == 0) {
-    bleKeyboard.print("HALL2");
-    oled.clearDisplay();
-    oled.setCursor(0, 2);
-    oled.setTextSize(2);
-    oled.print("HALL2");
-    oled.display();
-    }
-  }
-  if(h[3].hallReadCal() == 0) {
-    while(h[3].hallReadCal() == 0) {
-    bleKeyboard.print("HALL3");
-    oled.clearDisplay();
-    oled.setCursor(0, 2);
-    oled.setTextSize(2);
-    oled.print("HALL3");
-    oled.display();
-  }
-
-}
 }
 
-void setButtonRGB() {
-  //leds2[0] = CHSV(hue2, 255, 255);
-  //leds2[1] = CHSV(hue2, 255, 255);
-  //leds2[2] = CHSV(hue2, 255, 255);
-    //FastLED.show();
-  }
-
-void adjustVolume(int change) {
-  // Implement volume adjustment logic here
-}
-
-void changeLayer(int layermode) {
-  switch(layermode) {
-  case 0:
-    tempcurrentLayer = map(currentEncoderValue, 0, 4095, 0, 100);
-    if((tempcurrentLayer>=0)&&(tempcurrentLayer<=33)){
-      leds2[0] = CRGB::White;
-      leds2[1] = CRGB::Black;
-      leds2[2] = CRGB::Black;
-    }
-    else if ((tempcurrentLayer>34)&&(tempcurrentLayer<=66)){
-      leds2[0] = CRGB::Black;
-      leds2[1] = CRGB::White;
-      leds2[2] = CRGB::Black;
-    }
-    else if (tempcurrentLayer>66){
-      leds2[0] = CRGB::Black;
-      leds2[1] = CRGB::Black;
-      leds2[2] = CRGB::White;
-    }
-    //FastLED.setBrightness(tempcurrentLayer);
-    FastLED.setBrightness(25);
-  FastLED.show();
-  break;
-  case 1:
-    currentLayer = (currentLayer + 1) % MAX_LAYERS;
-    break;
-      default:
-      FastLED.show();
-      break;
-  }
-}
-
-
-
-void startTimer() {
-  startTime = millis();
-}
-
-void pauseTimer() {
-  
-}
-
-void stopTimer() {
-  
-}
-
-int getTimeLeft() {
-  unsigned long elapsedTime = (millis() - startTime) / 1000;
-  int timeLeft = timerDuration - elapsedTime;
-  return timeLeft > 0 ? timeLeft : 0;
-}
-
-void Task1code ( void * pvparameters ) {
-  for(;;) {
-  timedblink();
-  }
-}
-
-void HallScanCode( void * pvparameters) {
-
-  for(;;) {
-    
-    if(hallall.debounce(h[1].checkHallTrig(1)&&h[2].checkHallTrig(1)&&h[3].checkHallTrig(1)&&hallcalibrated)) {
-      bleKeyboard.print("KRONOS!!");
-    }
-    else{
-      if(hall1.debounce(h[1].checkHallTrig(1)&&hallcalibrated)) {
-        bleKeyboard.press(KEY_LEFT_CTRL);
-        bleKeyboard.press('c');
-        log_e("HALL 1 PRESSED");
-        }
-      else if (hall2.debounce(h[2].checkHallTrig(1)&&hallcalibrated)) {
-        bleKeyboard.press(KEY_LEFT_CTRL);
-        bleKeyboard.press('v');
-        log_e("HALL 2 PRESSED");
-      }
-      else if (hall3.debounce(h[3].checkHallTrig(1)&&hallcalibrated)) {
-        bleKeyboard.print("it's ");
-        log_e("HALL 3 PRESSED");
-      }
-    }
-    bleKeyboard.releaseAll();
-  }
-}
 void solidColor(CRGB* leds, int numLeds, CRGB color) {
   for(int i = 0; i < numLeds; i++) {
     leds[i] = color;
@@ -820,41 +549,12 @@ void setup() {
   h[5].setI2C("VDD");
   log_e("H6 Initialized!");
 
-  hall1.begin();
-  hall2.begin();
-  hall3.begin();
-  hallall.begin();
-  log_e("Halls Begun!");
-
-  //xTaskCreatePinnedToCore(
-  //  Task1code, /* Function to implement the task */
-  //  "Task1", /* Name of the task */
-  //  10000, /* Stack size in words */
-  //  NULL, /* Task input parameter */
-  //  0, /* Priority of the task */
-  //  &Task1, /* Task handle. */
-  // 1); /* Core where the task should run */
-
-  //xTaskCreatePinnedToCore(
-  //  HallScanCode, /* Function to implement the task */
-  //  "HallScan", /* Name of the task */
-  //  10000, /* Stack size in words */
-  //  NULL, /* Task input parameter */
-  //  0, /* Priority of the task */
-  //  &HallScan, /* Task handle. */
-  //  1); /* Core where the task should run */  
-
-  //OLED Display
-  //oled.setRotation(1); //rotates text on OLED 1=90 degrees, 2=180 degrees
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("failed to start SSD1306 OLED"));
     while (1);
   }
   log_e("OLED Intialized!");
-  //Misc IO
-
-
 
   //Fast LED
 	FastLED.addLeds<ARGB_CHIPSET,DATA_PIN,RGB>(leds,NUM_LEDS);
@@ -865,15 +565,6 @@ void setup() {
   FastLED.show();
   log_e("FASTLED Intialized!");
 
-  //Keyboard
-  bleKeyboard.begin();
-  delay(1000);
-  log_e("BLEKEYBOARD Intialized!");
-
-  //Startup Screen
-  updateDisplay(0);
-  delay(3000);
-
   // calibration only at boot up **(add calibration prompt or use NVS storage to skip this if already done)
   calibrateHallButtons();
   log_e("Calibration Complete!");
@@ -882,14 +573,8 @@ void setup() {
 }
 void loop() { 
   long start = micros();//KEEP AT BEGINNING OF LOOP, FOR TIMER
-
-  //updateLEDs(timeLeft);
-  //rainbowtime();
-  //checkHallPress();
   handleEncoder();
-  changeLayer(0);
-  int timeLeft = getTimeLeft();
   displayLayer=2;
-  updateDisplay(timeLeft);
+  updateDisplay(0);
   duration = micros() - start; // KEEP AT END, FOR TIMER
 }
